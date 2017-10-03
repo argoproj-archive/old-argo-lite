@@ -6,21 +6,27 @@ import * as engine from './engine';
 
 let executor: engine.Executor = null;
 
-yargs.command(['docker', '*'], 'Run argo using docker executor', yargs => yargs, args => {
+let argv = yargs
+    .option('e', {
+        alias: 'engine',
+        describe: 'Container executor engine',
+        choices: ['docker', 'kubernetes', 'kubernetes-in-cluster'],
+        default: 'docker',
+    }).argv;
+
+if (argv.engine === 'docker') {
     console.info('Using docker as container executor');
     executor = new engine.DockerExecutor();
-}).command(['kubernetes'], 'Run argo using kubernetes executor', yargs => yargs.option('c', {
-    alias: 'config',
-    describe: 'Kubernetes config file path',
-    demand: true,
-}).option('n', {
-    alias: 'namespace',
-    describe: 'Existing kubernetes namespace',
-    default: 'default',
-}), args => {
-    console.info(`Using kubernetes as container executor: config path: ${args.config}, namespace ${args.namespace}`);
-    executor = new engine.KubernetesExecutor(args.config, args.namespace);
-}).argv;
+} else if (argv.engine === 'kubernetes') {
+    argv = yargs
+        .option('c', {alias: 'config', describe: 'Kubernetes config file path', demand: true })
+        .option('n', {alias: 'namespace', describe: 'Existing kubernetes namespace', default: 'default'}).argv;
+    console.info(`Using kubernetes as container executor: config path: ${argv.config}, namespace ${argv.namespace}`);
+    executor = engine.KubernetesExecutor.fromConfigFile(argv.config, argv.namespace);
+} else if (argv.engine === 'kubernetes-in-cluster') {
+    console.info('Using kubernetes as container executor assuming argo is running inside the cluster');
+    executor = engine.KubernetesExecutor.inCluster();
+}
 
 let workflowEngine = new engine.WorkflowEngine(executor);
 

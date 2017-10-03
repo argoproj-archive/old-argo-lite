@@ -1,0 +1,36 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: argo-light-deployment
+  labels:
+    app: argo-light
+spec:
+  selector:
+    matchLabels:
+      app: argo-light
+  template:
+    metadata:
+      labels:
+        app: argo-light
+    spec:
+      containers:
+      - name: argo-light
+        image: alexmt/argo-light:latest
+        command: ["node", "/app/dist/main.js", "--engine", "kubernetes-in-cluster"]
+        ports:
+        - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: argo-light
+  name: argo-light
+spec:
+  ports:
+  - port: 80
+    targetPort: 8080
+  selector:
+    app: argo-light
+  sessionAffinity: None
+  type: LoadBalancer

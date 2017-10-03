@@ -9,11 +9,22 @@ import { Executor, StepResult, WorkflowContext } from './common';
 import * as utils from './utils';
 
 export class KubernetesExecutor implements Executor {
+
+    public static fromConfigFile(configPath: string, namespace: string, version = 'v1') {
+        let config = Object.assign({}, api.config.fromKubeconfig(api.config.loadKubeconfig(configPath)), {namespace, version });
+        return new KubernetesExecutor(configPath, config);
+    }
+
+    public static inCluster() {
+        let config = Object.assign({}, api.config.getInCluster());
+        return new KubernetesExecutor('', config);
+    }
+
     private core: api.Core;
     private podUpdates: Observable<any>;
 
-    constructor(private configPath: string, private namespace: string, version = 'v1') {
-        this.core = new api.Core(Object.assign({}, api.config.fromKubeconfig(api.config.loadKubeconfig(configPath)), {namespace, version, promises: true }));
+    private constructor(private configPath: string, private config: any) {
+        this.core = new api.Core(Object.assign(config, {promises: true}));
 
         this.podUpdates = new Observable(observer =>
             utils.reactifyJsonStream(this.core.ns.pods.getStream({ qs: { watch: true } })).map(item => item.object).subscribe(observer),
@@ -74,7 +85,7 @@ export class KubernetesExecutor implements Executor {
                     await Promise.all(Object.keys(step.template.inputs.artifacts || {}).map(async artifactName => {
                         let inputArtifactPath = inputArtifacts[artifactName];
                         let artifact = step.template.inputs.artifacts[artifactName];
-                        await this.runKubeCtl(['cp', inputArtifactPath, `${this.namespace}/${stepPod.metadata.name}:/__argo/`, '-c', 'step']);
+                        await this.runKubeCtl(['cp', inputArtifactPath, `${stepPod.metadata.name}:/__argo/`, '-c', 'step']);
                         await this.kubeCtlExec(stepPod, [`mv /__argo/${path.basename(inputArtifactPath)} ${artifact.path}`]);
                     }));
 
@@ -89,7 +100,7 @@ export class KubernetesExecutor implements Executor {
                     let artifacts = step.template.outputs && step.template.outputs.artifacts && await Promise.all(Object.keys(step.template.outputs.artifacts).map(async key => {
                         let artifact = step.template.outputs.artifacts[key];
                         let artifactPath = path.join(artifactsDir, key);
-                        await this.runKubeCtl(['cp', `${this.namespace}/${stepPod.metadata.name}:${artifact.path}`, artifactPath, '-c', 'step']);
+                        await this.runKubeCtl(['cp', `${stepPod.metadata.name}:${artifact.path}`, artifactPath, '-c', 'step']);
                         return { name: key, artifactPath };
                     })) || [];
 
@@ -121,7 +132,11 @@ export class KubernetesExecutor implements Executor {
     }
 
     private runKubeCtl(cmd: string[], rejectOnFail = true) {
-        return utils.exec(['kubectl', `--kubeconfig=${this.configPath}`].concat(cmd), rejectOnFail);
+        let args = ['kubectl'];
+        if (this.config) {
+            args.push(`--kubeconfig=${this.configPath}`);
+        }
+        return utils.exec(args.concat(cmd), rejectOnFail);
     }
 
     private isPodCompeleted(pod) {

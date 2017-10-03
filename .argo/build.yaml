@@ -1,0 +1,49 @@
+---
+type: workflow
+version: 1
+name: checkout-build
+
+inputs:
+  parameters:
+    COMMIT:
+      default: "%%session.commit%%"
+    REPO:
+      default: "%%session.repo%%"
+
+steps:
+-
+  checkout:
+    template: checkout
+-
+  build:
+    template: build
+    arguments:
+      artifacts.CODE: "%%steps.checkout.outputs.artifacts.CODE%%"
+
+outputs:
+  artifacts:
+    BINARY:
+      from: "%%steps.build.outputs.artifacts.BINARY%%"
+
+---
+type: container
+version: 1
+name: build
+description: Build the code
+
+inputs:
+  artifacts:
+    CODE:
+      path: /src
+
+outputs:
+  artifacts:
+    BINARY:
+      path: /src/main
+
+image: node:6.3.1
+resources:
+  mem_mib: 256
+  cpu_cores: 0.1
+command: ["sh", "-c"]
+args: [cd /src && npm install -g yarn && yarn install && npm run build]
