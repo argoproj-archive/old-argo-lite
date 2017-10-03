@@ -8,6 +8,7 @@ compatible with [Argo Dev CLI](https://argoproj.github.io/argo-site/docs/dev-cli
 Several features or argo workflow engine are not yet supported, engine is not fully tested and might crash but early testing/contributions are very very welcome.
 
 - [x] ~~Kubernetes integration~~
+- [ ] API to access artifacts
 - [ ] [Dynamic fixtures](https://argoproj.github.io/argo-site/docs/yaml/fixture_template.html)
 - [ ] add Argo UI into Argo-light distribution
 - [ ] [Docker-in-Docker](https://argoproj.github.io/argo-site/docs/yaml/argo_tutorial_2_create_docker_image_build_workflow.html)
