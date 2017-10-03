@@ -1,6 +1,7 @@
 {
     "compilerOptions": {
       "target": "es6",
+      "module": "commonjs",
       "moduleResolution": "node",
       "sourceMap": true,
       "emitDecoratorMetadata": true,
@@ -9,8 +10,10 @@
       "noImplicitAny": false,
       "types": [
           "request",
-          "express"
-      ]
+          "express",
+          "node"
+      ],
+      "outDir": "dist"
     },
     "exclude": [
       "node_modules",

@@ -1,9 +1,28 @@
 import { Observable } from 'rxjs';
 import * as express from 'express';
+import * as yargs from 'yargs';
 import * as bodyParser from 'body-parser';
 import * as engine from './engine';
 
-let workflowEngine = new engine.WorkflowEngine(new engine.DockerExecutor());
+let executor: engine.Executor = null;
+
+yargs.command(['docker', '*'], 'Run argo using docker executor', yargs => yargs, args => {
+    console.info('Using docker as container executor');
+    executor = new engine.DockerExecutor();
+}).command(['kubernetes'], 'Run argo using kubernetes executor', yargs => yargs.option('c', {
+    alias: 'config',
+    describe: 'Kubernetes config file path',
+    demand: true,
+}).option('n', {
+    alias: 'namespace',
+    describe: 'Existing kubernetes namespace',
+    default: 'default',
+}), args => {
+    console.info(`Using kubernetes as container executor: config path: ${args.config}, namespace ${args.namespace}`);
+    executor = new engine.KubernetesExecutor(args.config, args.namespace);
+}).argv;
+
+let workflowEngine = new engine.WorkflowEngine(executor);
 
 let app = express();
 app.use(bodyParser.json());
