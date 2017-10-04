@@ -17,11 +17,6 @@ export interface StepResult {
     internalError?: string;
 }
 
-export interface TaskResult {
-    task: model.Task;
-    stepResults: { [id: string]: StepResult };
-}
-
 export interface Executor {
     executeContainerStep(step: model.WorkflowStep, context: WorkflowContext, inputArtifacts: {[name: string]: string}): Observable<StepResult>;
     getLiveLogs(containerId: string): Observable<string>;

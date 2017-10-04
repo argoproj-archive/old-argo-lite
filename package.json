@@ -28,6 +28,7 @@
     "rxjs": "^5.4.3",
     "shell-escape": "^0.2.0",
     "shelljs": "^0.7.8",
+    "tar-fs": "^1.15.3",
     "ts-node": "^3.3.0",
     "tslint": "4.5.1",
     "typescript": "^2.5.2",

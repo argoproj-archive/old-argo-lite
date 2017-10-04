@@ -2,15 +2,16 @@ import { Observable } from 'rxjs';
 import * as moment from 'moment';
 import * as uuid from 'uuid';
 import * as fs from 'fs';
+import * as tar from 'tar-fs';
 
 import { WorkflowOrchestrator } from './workflow-orchestrator';
-import { Executor, TaskResult, StepResult } from './common';
+import { Executor, StepResult } from './common';
 import * as utils from './utils';
 import * as model from './model';
 
 export class WorkflowEngine {
     private orchestrator: WorkflowOrchestrator;
-    private taskResultsById = new Map<string, TaskResult>();
+    private taskResultsById = new Map<string, { task: model.Task; stepResults: { [id: string]: StepResult }}>();
     private stepResultsById = new Map<string, StepResult>();
 
     constructor(private executor: Executor) {
@@ -24,6 +25,7 @@ export class WorkflowEngine {
              } else {
                  let childStep = rootTask.children.find(child => child.id === res.id);
                  this.updateTaskStatus(childStep, res.result);
+                 taskResult.stepResults[res.id] = res.result;
              }
         });
     }
@@ -50,6 +52,30 @@ export class WorkflowEngine {
 
     public getTasks(): model.Task[] {
         return Array.from(this.taskResultsById.values()).map(item => item.task).sort((first, second) => second.create_time - first.create_time);
+    }
+
+    public getStepArtifact(id: string, artifactName: string) {
+        let stepResult = this.stepResultsById.get(id);
+        if (stepResult && stepResult.artifacts[artifactName]) {
+            return utils.reactifyStream(tar.pack(stepResult.artifacts[artifactName]));
+        }
+        return null;
+    }
+
+    public getTaskArtifacts(id: string): {name: string, artifact_type: string, workflow_id: string }[] {
+        let task = this.taskResultsById.get(id);
+        if (task) {
+            let artifacts = Object.keys(task.stepResults).map(stepId => {
+                return Object.keys(task.stepResults[stepId].artifacts || {}).map(artifactName => ({
+                    artifact_id: `${stepId}:${artifactName}`,
+                    name: artifactName,
+                    artifact_type: 'internal',
+                    workflow_id: id
+                }));
+            });
+            return artifacts.reduce((first, second) => first.concat(second), []);
+        }
+        return [];
     }
 
     public getStepLogs(id: string): Observable<string> {

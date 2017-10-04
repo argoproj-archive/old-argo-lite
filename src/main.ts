@@ -87,4 +87,19 @@ app.get('/v1/services/:id/logs', (req, res) => {
 app.get('/v1/service/events', (req, res) => streamServerEvents(req, res, workflowEngine.getServiceEvents(), event => JSON.stringify(event)));
 app.get('/v1/services/:id/events', (req, res) => streamServerEvents(req, res, workflowEngine.getServiceEvents(req.params.id), event => JSON.stringify(event)));
 
+app.get('/v1/artifacts', (req, res) => {
+    if (req.query.action === 'search') {
+        res.send({ data: workflowEngine.getTaskArtifacts(req.query.workflow_id) });
+    } else if (req.query.action === 'download') {
+        let [id, name] = req.query.artifact_id.split(':');
+        res.setHeader('Content-disposition', `attachment; filename=${name}.tar`);
+        workflowEngine.getStepArtifact(id, name).subscribe(chunk => res.write(chunk), err => res.send(err), () => res.status(200).send());
+    }
+});
+
+app.get('/v1/services/:id/outputs/:name', (req, res) => {
+    res.setHeader('Content-disposition', `attachment; filename=${req.params.name}.tar`);
+    workflowEngine.getStepArtifact(req.params.id, req.params.name).subscribe(chunk => res.write(chunk), err => res.send(err), () => res.status(200).send());
+});
+
 app.listen(8080);
