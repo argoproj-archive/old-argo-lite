@@ -1,8 +1,11 @@
 import { Observable } from 'rxjs';
 import * as moment from 'moment';
 import * as uuid from 'uuid';
+import * as fs from 'fs';
+
 import { WorkflowOrchestrator } from './workflow-orchestrator';
 import { Executor, TaskResult, StepResult } from './common';
+import * as utils from './utils';
 import * as model from './model';
 
 export class WorkflowEngine {
@@ -50,8 +53,16 @@ export class WorkflowEngine {
     }
 
     public getStepLogs(id: string): Observable<string> {
+        let logs: Observable<string> = null;
         let stepResult = this.stepResultsById.get(id);
-        return stepResult && stepResult.logs;
+        if (stepResult) {
+            if (stepResult.status === model.TaskStatus.Running && stepResult.stepId) {
+                logs = this.executor.getLiveLogs(stepResult.stepId);
+            } else if (stepResult.logsPath) {
+                logs = utils.reactifyStringStream(fs.createReadStream(stepResult.logsPath));
+            }
+        }
+        return logs;
     }
 
     private constructTask(template: model.Template, args: {[name: string]: string}): model.Task {
