@@ -46,7 +46,7 @@ export class WorkflowOrchestrator {
         for (let parallelStepsGroup of workflow.template.steps) {
             let results = await Promise.all(
                 Object.keys(parallelStepsGroup)
-                .map(stepName => this.processStep(taskId, parallelStepsGroup[stepName], context).then(res => Object.assign(res, { name: stepName })))
+                .map(stepName => this.processStep(taskId, parallelStepsGroup[stepName], context).then(res => Object.assign(res, { name: stepName }))),
             );
 
             for (let stepResult of results) {

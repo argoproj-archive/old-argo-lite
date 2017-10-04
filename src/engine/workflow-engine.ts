@@ -70,7 +70,7 @@ export class WorkflowEngine {
                     artifact_id: `${stepId}:${artifactName}`,
                     name: artifactName,
                     artifact_type: 'internal',
-                    workflow_id: id
+                    workflow_id: id,
                 }));
             });
             return artifacts.reduce((first, second) => first.concat(second), []);

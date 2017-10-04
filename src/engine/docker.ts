@@ -93,8 +93,7 @@ export class DockerExecutor implements Executor {
     private async ensureImageExists(imageUrl: string): Promise<any> {
         let res = await await this.docker.image.list({filter: imageUrl});
         if (res.length === 0) {
-            let [image, tag] = imageUrl.split(':');
-            await this.docker.image.create({}, {fromImage: image, tag});
+            await utils.exec(['docker', 'pull', imageUrl]);
         }
     }
 }
