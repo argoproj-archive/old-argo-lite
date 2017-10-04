@@ -3,6 +3,7 @@ import * as api from 'kubernetes-client';
 import * as path from 'path';
 import * as shell from 'shelljs';
 import * as shellEscape from 'shell-escape';
+import * as fs from 'fs';
 
 import * as model from './model';
 import { Executor, StepResult, WorkflowContext } from './common';
@@ -31,7 +32,7 @@ export class KubernetesExecutor implements Executor {
         ).retry().share();
     }
 
-    public executeContainerStep(step: model.WorkflowStep, context: WorkflowContext, inputArtifacts: {[name: string]: any}): Observable<StepResult> {
+    public executeContainerStep(step: model.WorkflowStep, context: WorkflowContext, inputArtifacts: {[name: string]: string}): Observable<StepResult> {
         return new Observable<StepResult>((observer: Observer<StepResult>) => {
             let stepPod = null;
 
@@ -41,20 +42,20 @@ export class KubernetesExecutor implements Executor {
                     stepPod = null;
                 }
             };
+            let result: StepResult = { status: model.TaskStatus.Waiting };
+
+            function notify(update: StepResult) {
+                observer.next(Object.assign(result, update));
+            }
 
             let execute = async () => {
-                let result: StepResult = { status: model.TaskStatus.Waiting };
-
-                function notify(update: StepResult) {
-                    observer.next(Object.assign(result, update));
-                }
 
                 try {
                     let tempDir = path.join(shell.tempdir(), 'argo', step.id);
                     let artifactsDir = path.join(tempDir, 'artifacts');
                     shell.mkdir('-p', artifactsDir);
 
-                    observer.next(Object.assign(result, { status: model.TaskStatus.Waiting }));
+                    notify({ status: model.TaskStatus.Waiting });
                     stepPod = await this.core.ns.pods.post({body: {
                         apiVersion: 'v1',
                         kind: 'Pod',
@@ -78,9 +79,7 @@ export class KubernetesExecutor implements Executor {
                     }});
 
                     await this.podUpdates.filter(pod => pod.metadata.name === step.id && pod.status.phase !== 'Pending').first().toPromise();
-
-                    let logs = utils.reactifyStringStream(this.core.ns.po(stepPod.metadata.name).log.getStream({ qs: { follow: true } }));
-                    observer.next(Object.assign(result, { status: model.TaskStatus.Running }, logs));
+                    notify({ status: model.TaskStatus.Running, stepId: stepPod.metadata.name });
 
                     await Promise.all(Object.keys(step.template.inputs.artifacts || {}).map(async artifactName => {
                         let inputArtifactPath = inputArtifacts[artifactName];
@@ -109,22 +108,31 @@ export class KubernetesExecutor implements Executor {
 
                     await this.kubeCtlExec(stepPod, ['echo done > /__argo/artifacts_out']);
                     let completedPod = await this.podUpdates.filter(pod => pod.metadata.name === step.id && this.isPodCompeleted(pod)).first().toPromise();
-                    let logLines = await utils.reactifyStringStream(this.core.ns.po(stepPod.metadata.name).log.getStream({ qs: { follow: true } })).toArray().toPromise();
+
+                    let logLines = await this.getLiveLogs(stepPod.metadata.name).toArray().toPromise();
+                    let logsPath = path.join(tempDir, 'logs');
+                    fs.writeFileSync(logsPath, logLines.join(''));
+                    notify({ logsPath });
 
                     notify({
                         status: completedPod.status.phase === 'Succeeded' ? model.TaskStatus.Success : model.TaskStatus.Failed,
                         artifacts: artifactsMap,
-                        logs: Observable.from(logLines),
                     });
+                } catch (e) {
+                    notify({ status: model.TaskStatus.Failed, internalError: e.toString() });
                 } finally {
                     await cleanUp();
                     observer.complete();
                 }
             };
 
-            execute().catch(e => observer.error(e));
+            execute();
             return cleanUp;
         });
+    }
+
+    public getLiveLogs(containerId: string): Observable<string> {
+        return utils.reactifyStringStream(this.core.ns.po(containerId).log.getStream({ qs: { follow: true } }));
     }
 
     private kubeCtlExec(stepPod: any, cmd: string[], rejectOnFail = true) {

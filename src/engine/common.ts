@@ -7,9 +7,13 @@ export interface WorkflowContext {
 }
 
 export interface StepResult {
+    // Executor specific step id.
+    stepId?: string;
     status?: model.TaskStatus;
-    logs?: Observable<string>;
-    artifacts?: { [name: string]: any };
+    // Path to file with logs. Should be available after step is completed.
+    logsPath?: string;
+    // Artifacts paths by name
+    artifacts?: { [name: string]: string };
     internalError?: string;
 }
 
@@ -19,5 +23,6 @@ export interface TaskResult {
 }
 
 export interface Executor {
-    executeContainerStep(step: model.WorkflowStep, context: WorkflowContext, inputArtifacts: {[name: string]: any}): Observable<StepResult>;
+    executeContainerStep(step: model.WorkflowStep, context: WorkflowContext, inputArtifacts: {[name: string]: string}): Observable<StepResult>;
+    getLiveLogs(containerId: string): Observable<string>;
 }

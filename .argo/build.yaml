@@ -22,8 +22,8 @@ steps:
 
 outputs:
   artifacts:
-    BINARY:
-      from: "%%steps.build.outputs.artifacts.BINARY%%"
+    CODE:
+      from: "%%steps.build.outputs.artifacts.CODE%%"
 
 ---
 type: container
@@ -38,8 +38,8 @@ inputs:
 
 outputs:
   artifacts:
-    BINARY:
-      path: /src/main
+    CODE:
+      path: /src
 
 image: node:6.3.1
 resources:
