@@ -1,0 +1,60 @@
+---
+type: workflow
+version: 1
+name: test-complex-workflow
+
+inputs:
+  parameters:
+    COMMIT:
+      default: "%%session.commit%%"
+    REPO:
+      default: "%%session.repo%%"
+
+steps:
+- STEP1:
+    image: busybox
+    command: ["sh", "-c"]
+    args: ["mkdir /src && echo test > /src/test"]
+    outputs:
+      artifacts:
+        CODE:
+          path: /src
+- STEP2_1:
+    template: text-nested-workflow
+    arguments:
+      artifacts.CODE: "%%steps.STEP1.outputs.artifacts.CODE%%"
+      parameters.VAL: "STEP2_1"
+
+---
+type: workflow
+version: 1
+name: text-nested-workflow
+inputs:
+  artifacts:
+    CODE:
+  parameters:
+    VAL:
+steps:
+- NESTED_STEP1:
+    template: test-step
+
+---
+type: container
+version: 1
+name: test-step
+resources:
+  mem_mib: 100
+  cpu_cores: 0.1
+image: busybox
+command: ["sh", "-c"]
+args: ["echo 'hello %%inputs.parameters.VAL%%' > /src/test"]
+inputs:
+  parameters:
+    VAL:
+  artifacts:
+    CODE:
+      path: /src
+outputs:
+  artifacts:
+    CODE:
+      path: /src

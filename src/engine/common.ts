@@ -17,6 +17,11 @@ export interface StepResult {
     internalError?: any;
 }
 
+export interface StepInput {
+    parameters: { [name: string]: string };
+    artifacts: { [name: string]: string };
+}
+
 export interface Executor {
     executeContainerStep(step: model.WorkflowStep, context: WorkflowContext, inputArtifacts: {[name: string]: string}): Observable<StepResult>;
     getLiveLogs(containerId: string): Observable<string>;

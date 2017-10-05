@@ -45,7 +45,7 @@ export class DockerExecutor implements Executor {
                     let artifactsDir = path.join(tempDir, 'artifacts');
                     shell.mkdir('-p', artifactsDir);
 
-                    await Promise.all(Object.keys(step.template.inputs.artifacts || {}).map(async artifactName => {
+                    await Promise.all(Object.keys((step.template.inputs || {}).artifacts || {}).map(async artifactName => {
                         let inputArtifactPath = inputArtifacts[artifactName];
                         let artifact = step.template.inputs.artifacts[artifactName];
                         await this.dockerMakeDir(container, artifact.path);

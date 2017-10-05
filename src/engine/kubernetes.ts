@@ -73,6 +73,12 @@ export class KubernetesExecutor implements Executor {
                                     until [ -f /__argo/artifacts_out ]; do sleep 1; done;
                                     exit $script_exit_code`,
                                 ],
+                                resources: step.template.resources && {
+                                    requests: {
+                                        memory: step.template.resources.mem_mib && `${step.template.resources.mem_mib}Mi`,
+                                        cpu: step.template.resources.cpu_cores && `${step.template.resources.cpu_cores}m`,
+                                    },
+                                },
                             }],
                             restartPolicy: 'Never',
                         },
@@ -81,7 +87,7 @@ export class KubernetesExecutor implements Executor {
                     await this.podUpdates.filter(pod => pod.metadata.name === step.id && pod.status.phase !== 'Pending').first().toPromise();
                     notify({ status: model.TaskStatus.Running, stepId: stepPod.metadata.name });
 
-                    await Promise.all(Object.keys(step.template.inputs.artifacts || {}).map(async artifactName => {
+                    await Promise.all(Object.keys(step.template.inputs && step.template.inputs.artifacts || {}).map(async artifactName => {
                         let inputArtifactPath = inputArtifacts[artifactName];
                         let artifact = step.template.inputs.artifacts[artifactName];
                         await this.runKubeCtl(['cp', inputArtifactPath, `${stepPod.metadata.name}:/__argo/`, '-c', 'step']);
