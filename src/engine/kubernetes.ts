@@ -67,10 +67,10 @@ export class KubernetesExecutor implements Executor {
                                 command: ['sh', '-c'],
                                 args: [
                                     `mkdir -p /__argo;
-                                    until [ -f /__argo/artifacts_in ]; do echo downloading step artifacts; sleep 1; done;
+                                    until [ -f /__argo/artifacts_in ]; do sleep 1; done;
                                     ${shellEscape(step.template.command.concat(step.template.args))};script_exit_code=$?;
                                     echo done > /__argo/step_done;
-                                    until [ -f /__argo/artifacts_out ]; do echo uploading step artifacts; sleep 1; done;
+                                    until [ -f /__argo/artifacts_out ]; do sleep 1; done;
                                     exit $script_exit_code`,
                                 ],
                             }],
@@ -85,15 +85,15 @@ export class KubernetesExecutor implements Executor {
                         let inputArtifactPath = inputArtifacts[artifactName];
                         let artifact = step.template.inputs.artifacts[artifactName];
                         await this.runKubeCtl(['cp', inputArtifactPath, `${stepPod.metadata.name}:/__argo/`, '-c', 'step']);
-                        await this.kubeCtlExec(stepPod, [`mv /__argo/${path.basename(inputArtifactPath)} ${artifact.path}`]);
+                        await this.kubeCtlExec(stepPod, [`mkdir -p ${path.dirname(artifact.path)} && mv /__argo/${path.basename(inputArtifactPath)} ${artifact.path}`]);
                     }));
 
                     await this.kubeCtlExec(stepPod, ['echo done > /__argo/artifacts_in']);
 
                     let stepIsDone = false;
                     do {
-                        let res = await this.kubeCtlExec(stepPod, ['ls', '/__argo/artifacts_in'], false);
-                        stepIsDone = res.code === 0;
+                        let res = await this.kubeCtlExec(stepPod, ['cat /__argo/step_done'], false);
+                        stepIsDone = res.code === 0 && (res.stdout || '').trim() === 'done';
                     } while (!stepIsDone);
 
                     let artifacts = step.template.outputs && step.template.outputs.artifacts && await Promise.all(Object.keys(step.template.outputs.artifacts).map(async key => {
@@ -119,7 +119,7 @@ export class KubernetesExecutor implements Executor {
                         artifacts: artifactsMap,
                     });
                 } catch (e) {
-                    notify({ status: model.TaskStatus.Failed, internalError: e.toString() });
+                    notify({ status: model.TaskStatus.Failed, internalError: e });
                 } finally {
                     await cleanUp();
                     observer.complete();

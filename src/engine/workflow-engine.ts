@@ -125,7 +125,7 @@ export class WorkflowEngine {
             }
             task['status_detail'] = {
                 code: this.getStatusCode(stepResult.status),
-                message: stepResult.internalError,
+                message: JSON.stringify(stepResult.internalError),
             };
         }
     }

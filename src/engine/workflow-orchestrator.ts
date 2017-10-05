@@ -12,7 +12,7 @@ export class WorkflowOrchestrator {
             try {
                 await this.processStep(task.id, {id: task.id, template: task.template, arguments: task.arguments}, { workflow: null, results: {} });
             } catch (e) {
-                this.stepResultsQueue.next({id: task.id, taskId: task.id, result: { status: model.TaskStatus.Failed, internalError: e.toString() }});
+                this.stepResultsQueue.next({id: task.id, taskId: task.id, result: { status: model.TaskStatus.Failed, internalError: e }});
             }
         });
     }

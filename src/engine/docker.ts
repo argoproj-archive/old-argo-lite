@@ -11,9 +11,12 @@ import { Executor, StepResult, WorkflowContext } from './common';
 export class DockerExecutor implements Executor {
 
     private docker: Docker;
+    private emptyDir: string;
 
     constructor() {
         this.docker = new Docker({ socketPath: '/var/run/docker.sock' });
+        this.emptyDir = path.join(shell.tempdir(), 'empty');
+        shell.mkdir('-p', this.emptyDir);
     }
 
     public executeContainerStep(step: model.WorkflowStep, context: WorkflowContext, inputArtifacts: {[name: string]: string}): Observable<StepResult> {
@@ -45,6 +48,7 @@ export class DockerExecutor implements Executor {
                     await Promise.all(Object.keys(step.template.inputs.artifacts || {}).map(async artifactName => {
                         let inputArtifactPath = inputArtifacts[artifactName];
                         let artifact = step.template.inputs.artifacts[artifactName];
+                        await this.dockerMakeDir(container, artifact.path);
                         await utils.exec(['docker', 'cp', inputArtifactPath, `${container.id}:${artifact.path}`], false);
                     }));
 
@@ -70,7 +74,7 @@ export class DockerExecutor implements Executor {
                     artifacts.forEach(item => artifactsMap[item.name] = item.artifactPath);
                     notify({ status: status.StatusCode === 0 ? model.TaskStatus.Success : model.TaskStatus.Failed, artifacts: artifactsMap });
                 } catch (e) {
-                    notify({ status: model.TaskStatus.Failed, internalError: e.toString() });
+                    notify({ status: model.TaskStatus.Failed, internalError: e });
                 } finally {
                     await cleanUpContainer();
                     observer.complete();
@@ -94,6 +98,13 @@ export class DockerExecutor implements Executor {
         let res = await await this.docker.image.list({filter: imageUrl});
         if (res.length === 0) {
             await utils.exec(['docker', 'pull', imageUrl]);
+        }
+    }
+
+    private async dockerMakeDir(container: any, dirPath: string) {
+        let parts = path.dirname(dirPath).split('/').filter(item => !!item);
+        for (let i = 0; i < parts.length; i++) {
+            await utils.exec(['docker', 'cp', this.emptyDir, `${container.id}:/${parts.slice(0, i + 1).join('/')}`], false);
         }
     }
 }

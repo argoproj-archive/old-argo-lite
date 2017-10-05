@@ -29,21 +29,20 @@ outputs:
 type: container
 version: 1
 name: build
-description: Build the code
 
 inputs:
   artifacts:
     CODE:
-      path: /src
+      path: /app/src
 
 outputs:
   artifacts:
     CODE:
-      path: /src
+      path: /app/src
 
 image: node:6.3.1
 resources:
   mem_mib: 256
   cpu_cores: 0.1
 command: ["sh", "-c"]
-args: [cd /src && npm install -g yarn && yarn install && npm run build]
+args: [cd /app/src && npm install -g yarn && yarn install && npm run build]

@@ -14,7 +14,7 @@ export interface StepResult {
     logsPath?: string;
     // Artifacts paths by name
     artifacts?: { [name: string]: string };
-    internalError?: string;
+    internalError?: any;
 }
 
 export interface Executor {

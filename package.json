@@ -7,6 +7,7 @@
   "scripts": {
     "server:dev": "nodemon --nolazy --inspect -r ts-node/register src/main.ts",
     "server:dev:kubernetes": "nodemon --nolazy --inspect -r ts-node/register src/main.ts --engine kubernetes -c ${KUBECONFIG}",
+    "lint": "tslint -c tslint.json --project tsconfig.json",
     "build": "tsc"
   },
   "dependencies": {
