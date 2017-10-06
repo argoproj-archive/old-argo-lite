@@ -6,20 +6,39 @@ import { Docker } from 'node-docker-api';
 
 import * as model from './model';
 import * as utils from './utils';
-import { Executor, StepResult, WorkflowContext } from './common';
+import { Executor, StepResult, WorkflowContext, Logger } from './common';
 
 export class DockerExecutor implements Executor {
 
     private docker: Docker;
     private emptyDir: string;
 
-    constructor() {
+    constructor(private logger: Logger) {
         this.docker = new Docker({ socketPath: '/var/run/docker.sock' });
         this.emptyDir = path.join(shell.tempdir(), 'empty');
         shell.mkdir('-p', this.emptyDir);
     }
 
-    public executeContainerStep(step: model.WorkflowStep, context: WorkflowContext, inputArtifacts: {[name: string]: string}): Observable<StepResult> {
+    public async createNetwork(name: string): Promise<string> {
+        this.logger.debug(`Creating new network: name: '${name}';`);
+        let res = await this.docker.network.create({ name });
+        let networkId = res.id.toString();
+        await utils.execute(async () => {
+            let networks = await this.docker.network.list();
+            if (networks.findIndex(item => item.id === networkId) === -1 ) {
+                throw new Error('Docker failed to create new network');
+            }
+        }, 100, 5);
+        this.logger.debug(`Network has been created: id: '${networkId}' name: '${name}'`);
+        return networkId;
+    }
+
+    public async deleteNetwork(id: string): Promise<any> {
+        let network = this.docker.network.get(id);
+        await network.remove();
+    }
+
+    public executeContainerStep(step: model.WorkflowStep, context: WorkflowContext, inputArtifacts: {[name: string]: string}, networkId: string): Observable<StepResult> {
         return new Observable<StepResult>((observer: Observer<StepResult>) => {
             let container = null;
             let result: StepResult = { status: model.TaskStatus.Waiting };
@@ -28,18 +47,22 @@ export class DockerExecutor implements Executor {
                 observer.next(Object.assign(result, update));
             }
 
-            async function cleanUpContainer() {
+            let cleanUpContainer = async () => {
                 if (container) {
-                    await container.delete({ force: true });
+                    await this.removeContainerSafe(container);
                     container = null;
                 }
-            }
+            };
 
             let execute = async () => {
                 try {
                     await this.ensureImageExists(step.template.image);
 
                     container = await this.docker.container.create({ image: step.template.image, cmd: step.template.command.concat(step.template.args)});
+
+                    if (networkId) {
+                        await this.docker.network.get(networkId).connect({ container: container.id, endpointConfig: { aliases: [ step.id ] }});
+                    }
 
                     let tempDir = path.join(shell.tempdir(), 'argo', step.id);
                     let artifactsDir = path.join(tempDir, 'artifacts');
@@ -52,9 +75,8 @@ export class DockerExecutor implements Executor {
                         await utils.exec(['docker', 'cp', inputArtifactPath, `${container.id}:${artifact.path}`], false);
                     }));
 
-                    notify({ status: model.TaskStatus.Running, stepId: container.id });
-
                     await container.start();
+                    notify({ status: model.TaskStatus.Running, stepId: container.id, networkName: step.id });
 
                     let status = await container.wait();
 
@@ -88,6 +110,16 @@ export class DockerExecutor implements Executor {
 
     public getLiveLogs(containerId: string): Observable<string> {
         return this.getContainerLogs(this.docker.container.get(containerId));
+    }
+
+    private async removeContainerSafe(container): Promise<any> {
+        return utils.executeSafe(async () => {
+            try {
+                await container.kill();
+            } finally {
+                await container.delete({ force: true });
+            }
+        }, 3, 100);
     }
 
     private getContainerLogs(container): Observable<string> {

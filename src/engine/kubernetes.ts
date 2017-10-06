@@ -6,25 +6,25 @@ import * as shellEscape from 'shell-escape';
 import * as fs from 'fs';
 
 import * as model from './model';
-import { Executor, StepResult, WorkflowContext } from './common';
+import { Executor, StepResult, WorkflowContext, Logger } from './common';
 import * as utils from './utils';
 
 export class KubernetesExecutor implements Executor {
 
-    public static fromConfigFile(configPath: string, namespace: string, version = 'v1') {
+    public static fromConfigFile(logger: Logger, configPath: string, namespace: string, version = 'v1') {
         let config = Object.assign({}, api.config.fromKubeconfig(api.config.loadKubeconfig(configPath)), {namespace, version });
-        return new KubernetesExecutor(configPath, config);
+        return new KubernetesExecutor(logger, configPath, config);
     }
 
-    public static inCluster() {
+    public static inCluster(logger: Logger) {
         let config = Object.assign({}, api.config.getInCluster());
-        return new KubernetesExecutor('', config);
+        return new KubernetesExecutor(logger, '', config);
     }
 
     private core: api.Core;
     private podUpdates: Observable<any>;
 
-    private constructor(private configPath: string, private config: any) {
+    private constructor(private logger: Logger, private configPath: string, private config: any) {
         this.core = new api.Core(Object.assign(config, {promises: true}));
 
         this.podUpdates = new Observable(observer =>
@@ -32,7 +32,16 @@ export class KubernetesExecutor implements Executor {
         ).retry().share();
     }
 
-    public executeContainerStep(step: model.WorkflowStep, context: WorkflowContext, inputArtifacts: {[name: string]: string}): Observable<StepResult> {
+    public async createNetwork(name: string): Promise<string> {
+        // do nothing, pods are running in same network
+        return name;
+    }
+
+    public async deleteNetwork(name: string): Promise<any> {
+        // do nothing, pods are running in same network
+    }
+
+    public executeContainerStep(step: model.WorkflowStep, context: WorkflowContext, inputArtifacts: {[name: string]: string}, networkId: string): Observable<StepResult> {
         return new Observable<StepResult>((observer: Observer<StepResult>) => {
             let stepPod = null;
 
@@ -84,28 +93,35 @@ export class KubernetesExecutor implements Executor {
                         },
                     }});
 
-                    await this.podUpdates.filter(pod => pod.metadata.name === step.id && pod.status.phase !== 'Pending').first().toPromise();
-                    notify({ status: model.TaskStatus.Running, stepId: stepPod.metadata.name });
+                    let startedPod = await this.podUpdates.filter(pod => pod.metadata.name === step.id && pod.status.phase !== 'Pending').first().toPromise();
 
                     await Promise.all(Object.keys(step.template.inputs && step.template.inputs.artifacts || {}).map(async artifactName => {
                         let inputArtifactPath = inputArtifacts[artifactName];
                         let artifact = step.template.inputs.artifacts[artifactName];
-                        await this.runKubeCtl(['cp', inputArtifactPath, `${stepPod.metadata.name}:/__argo/`, '-c', 'step']);
-                        await this.kubeCtlExec(stepPod, [`mkdir -p ${path.dirname(artifact.path)} && mv /__argo/${path.basename(inputArtifactPath)} ${artifact.path}`]);
+                        this.logger.debug(`Uploading artifacts to '${artifact.path}' for step id ${step.id}`);
+                        await this.runKubeCtl(['cp', inputArtifactPath, `${stepPod.metadata.name}:/__argo/`, '-c', 'step'], true);
+                        await this.kubeCtlExec(stepPod, [`mkdir -p ${path.dirname(artifact.path)} && mv /__argo/${path.basename(inputArtifactPath)} ${artifact.path}`], true);
+                        this.logger.debug(`Successfully uploaded artifacts to '${artifact.path}' for step id ${step.id}`);
                     }));
 
                     await this.kubeCtlExec(stepPod, ['echo done > /__argo/artifacts_in']);
 
+                    notify({ status: model.TaskStatus.Running, stepId: stepPod.metadata.name, networkName: startedPod.status.podIP });
+
+                    this.logger.debug(`Running user script for for step id ${step.id}`);
                     let stepIsDone = false;
                     do {
                         let res = await this.kubeCtlExec(stepPod, ['cat /__argo/step_done'], false);
                         stepIsDone = res.code === 0 && (res.stdout || '').trim() === 'done';
                     } while (!stepIsDone);
+                    this.logger.debug(`User script for for step id ${step.id} has been completed`);
 
                     let artifacts = step.template.outputs && step.template.outputs.artifacts && await Promise.all(Object.keys(step.template.outputs.artifacts).map(async key => {
                         let artifact = step.template.outputs.artifacts[key];
                         let artifactPath = path.join(artifactsDir, key);
+                        this.logger.debug(`Downloading artifacts from '${artifact.path}' for step id ${step.id}`);
                         await this.runKubeCtl(['cp', `${stepPod.metadata.name}:${artifact.path}`, artifactPath, '-c', 'step']);
+                        this.logger.debug(`Successfully downloaded artifacts from '${artifact.path}' for step id ${step.id}`);
                         return { name: key, artifactPath };
                     })) || [];
 

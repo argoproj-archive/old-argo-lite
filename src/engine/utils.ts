@@ -21,7 +21,7 @@ export function reactifyJsonStream(stream) {
 
 export function exec(cmd: string[], rejectOnFail = true): Promise<{code, stdout, stderr}> {
     return new Promise((resolve, reject) => {
-        shell.exec(shellEscape(cmd), (code, stdout, stderr) => {
+        shell.exec(shellEscape(cmd), { silent: true } , (code, stdout, stderr) => {
             let res = { code, stdout, stderr };
             if (code !== 0 && rejectOnFail) {
                 reject(res);
@@ -30,4 +30,33 @@ export function exec(cmd: string[], rejectOnFail = true): Promise<{code, stdout,
             }
         });
     });
+}
+
+export function timeout(milliseconds: number): Promise<any> {
+    return new Promise(resolve => setTimeout(() => {
+        resolve(true);
+    }, milliseconds));
+}
+
+export async function execute(action: () => Promise<any>, retryCount: number, retryTimeoutMs: number, doNotFail = false) {
+    let done = false;
+    let error;
+    while (!done && retryCount > 0) {
+        try {
+            error = null;
+            await action();
+            done = true;
+        } catch (e) {
+            error = e;
+            retryCount--;
+            await timeout(retryTimeoutMs);
+        }
+    }
+    if (error && doNotFail === false) {
+        throw error;
+    }
+}
+
+export async function executeSafe(action: () => Promise<any>, retryCount: number, retryTimeoutMs: number, doNotFail = true) {
+    return execute(action, retryCount, retryTimeoutMs, true);
 }

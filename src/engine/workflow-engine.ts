@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import * as tar from 'tar-fs';
 
 import { WorkflowOrchestrator } from './workflow-orchestrator';
-import { Executor, StepResult } from './common';
+import { Executor, StepResult, Logger } from './common';
 import * as utils from './utils';
 import * as model from './model';
 
@@ -14,8 +14,8 @@ export class WorkflowEngine {
     private taskResultsById = new Map<string, { task: model.Task; stepResults: { [id: string]: StepResult }}>();
     private stepResultsById = new Map<string, StepResult>();
 
-    constructor(private executor: Executor) {
-        this.orchestrator = new WorkflowOrchestrator(executor);
+    constructor(private executor: Executor, private logger: Logger) {
+        this.orchestrator = new WorkflowOrchestrator(executor, logger);
         this.orchestrator.getStepResults().subscribe(res => {
             this.stepResultsById.set(res.id, res.result);
             let taskResult = this.taskResultsById.get(res.taskId);
@@ -96,6 +96,19 @@ export class WorkflowEngine {
         let task: model.Task = {
             id, name: template.name, template, arguments: args, launch_time: 0, create_time: moment().unix(), task_id: id, commit: {}, artifact_tags: '' };
         task.children = [];
+
+        function addFixtureTasks(step: model.WorkflowStep) {
+            for (let fixtureGroup of (step.template.fixtures || [])) {
+                Object.keys(fixtureGroup).forEach(fixtureName => {
+                    let fixture = fixtureGroup[fixtureName];
+                    fixture['id'] = uuid();
+                    let fixtureTask = { id: fixture['id'], template: fixture.template, launch_time: 0, create_time: moment().unix(), status: model.TaskStatus.Init };
+                    task.children.push(fixtureTask);
+                });
+            }
+        }
+
+        addFixtureTasks(task);
         let childGroups = (task.template.steps || []).slice();
         while (childGroups.length > 0) {
             let group = childGroups.pop();
@@ -107,6 +120,7 @@ export class WorkflowEngine {
                 if (step.template.steps) {
                     childGroups = childGroups.concat(step.template.steps);
                 }
+                addFixtureTasks(step);
             });
         }
         return task;
@@ -123,9 +137,13 @@ export class WorkflowEngine {
                     task.run_time = moment().unix() - (task.launch_time || task.create_time);
                     break;
             }
+            let message = '';
+            if (stepResult.internalError) {
+                message = stepResult.internalError instanceof Error ? stepResult.internalError.message : JSON.stringify(stepResult.internalError);
+            }
             task['status_detail'] = {
                 code: this.getStatusCode(stepResult.status),
-                message: JSON.stringify(stepResult.internalError),
+                message,
             };
         }
     }

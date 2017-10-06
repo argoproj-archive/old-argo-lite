@@ -1,8 +1,20 @@
 import { Observable } from 'rxjs';
 import * as express from 'express';
 import * as yargs from 'yargs';
+import * as bunyan from 'bunyan';
 import * as bodyParser from 'body-parser';
 import * as engine from './engine';
+
+let logger = new engine.Logger(bunyan.createLogger({
+    name: 'argo-lite',
+    stream: process.stdout,
+    level: 'debug',
+    serializers: {
+        req: bunyan.stdSerializers.req,
+        res: bunyan.stdSerializers.res,
+        err: bunyan.stdSerializers.err,
+    },
+}));
 
 let executor: engine.Executor = null;
 
@@ -16,19 +28,19 @@ let argv = yargs
 
 if (argv.engine === 'docker') {
     console.info('Using docker as container executor');
-    executor = new engine.DockerExecutor();
+    executor = new engine.DockerExecutor(logger);
 } else if (argv.engine === 'kubernetes') {
     argv = yargs
         .option('c', {alias: 'config', describe: 'Kubernetes config file path', demand: true })
         .option('n', {alias: 'namespace', describe: 'Existing kubernetes namespace', default: 'default'}).argv;
     console.info(`Using kubernetes as container executor: config path: ${argv.config}, namespace ${argv.namespace}`);
-    executor = engine.KubernetesExecutor.fromConfigFile(argv.config, argv.namespace);
+    executor = engine.KubernetesExecutor.fromConfigFile(logger, argv.config, argv.namespace);
 } else if (argv.engine === 'kubernetes-in-cluster') {
     console.info('Using kubernetes as container executor assuming argo is running inside the cluster');
-    executor = engine.KubernetesExecutor.inCluster();
+    executor = engine.KubernetesExecutor.inCluster(logger);
 }
 
-let workflowEngine = new engine.WorkflowEngine(executor);
+let workflowEngine = new engine.WorkflowEngine(executor, logger);
 
 let app = express();
 app.use(bodyParser.json());

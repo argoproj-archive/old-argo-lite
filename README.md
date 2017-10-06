@@ -10,7 +10,7 @@ Several features of the full Argo workflow engine are not yet supported by Argo-
 
 - [x] ~~Kubernetes integration~~
 - [x] ~~API to access artifacts~~
-- [ ] [Dynamic fixtures](https://argoproj.github.io/argo-site/docs/yaml/fixture_template.html)
+- [x] ~~[Dynamic fixtures](https://argoproj.github.io/argo-site/docs/yaml/fixture_template.html)~~
 - [ ] Add Argo UI into Argo-lite distribution
 - [ ] [Docker-in-Docker](https://argoproj.github.io/argo-site/docs/yaml/argo_tutorial_2_create_docker_image_build_workflow.html)
 - [ ] No unit or e2e tests
